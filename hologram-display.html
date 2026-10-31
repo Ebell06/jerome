@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>JEROME // HOLOGRAM</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Orbitron:wght@500;700;900&display=swap');
+
+  /* IMPORTANT: pure black stays invisible in a Pepper's Ghost reflection —
+     only the glowing (bright) pixels will appear to float in the glass.
+     Never add a background image, gradient, or grid texture here. */
+  :root{
+    --primary: #39ff6a;
+    --dim: #0d3319;
+    --text-dim: #4a7a5a;
+  }
+  *{ box-sizing:border-box; margin:0; padding:0; }
+  html, body{
+    width:100%; height:100%;
+    background:#000; /* must stay pure black */
+    overflow:hidden;
+  }
+  body{
+    display:flex; align-items:center; justify-content:center;
+    font-family:'Space Mono', monospace;
+    color: var(--primary);
+  }
+
+  /* Force a square viewport so this maps 1:1 onto a square screen (e.g. HyperPixel 4.0) */
+  .stage{
+    width:100vmin; height:100vmin;
+    position:relative;
+  }
+
+  .clock{
+    position:absolute; top:6%; left:50%; transform:translateX(-50%);
+    font-family:'Orbitron', sans-serif; font-weight:700;
+    font-size:7vmin; letter-spacing:0.2vmin;
+    text-shadow: 0 0 2vmin rgba(57,255,106,0.7);
+  }
+  .date{
+    position:absolute; top:16%; left:50%; transform:translateX(-50%);
+    font-size:2.2vmin; letter-spacing:0.5vmin; color: var(--text-dim);
+  }
+
+  .radar-wrap{
+    position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+    width:62vmin; height:62vmin;
+  }
+  .ring{ position:absolute; inset:0; border-radius:50%; border:0.25vmin solid var(--dim); }
+  .ring.r2{ inset:8%; border-color: rgba(57,255,106,0.25); }
+  .ring.r3{ inset:18%; border-style:dashed; border-color: rgba(57,255,106,0.3); animation: spin 20s linear infinite; }
+  .ring.r4{ inset:30%; border-color: rgba(57,255,106,0.45); }
+  .sweep{
+    position:absolute; inset:0; border-radius:50%;
+    background: conic-gradient(from 0deg, rgba(57,255,106,0.5), transparent 22%);
+    animation: spin 4s linear infinite;
+    mix-blend-mode: screen;
+  }
+  .core{
+    position:absolute; inset:36%; border-radius:50%;
+    background: radial-gradient(circle, rgba(57,255,106,0.55), transparent 70%);
+    display:flex; align-items:center; justify-content:center;
+    font-family:'Orbitron', sans-serif; font-weight:900;
+    font-size:4.2vmin; letter-spacing:0.3vmin;
+    text-shadow: 0 0 2.5vmin var(--primary);
+  }
+  @keyframes spin{ to{ transform: rotate(360deg); } }
+
+  .status{
+    position:absolute; bottom:10%; left:50%; transform:translateX(-50%);
+    text-align:center; font-size:2vmin; letter-spacing:0.4vmin; color: var(--text-dim);
+  }
+  .status b{ color: var(--primary); }
+
+  .corner{
+    position:absolute; font-size:1.6vmin; letter-spacing:0.3vmin; color: var(--text-dim);
+  }
+  .corner.tl{ top:4%; left:4%; }
+  .corner.tr{ top:4%; right:4%; text-align:right; }
+  .corner.bl{ bottom:4%; left:4%; }
+  .corner.br{ bottom:4%; right:4%; text-align:right; }
+</style>
+</head>
+<body>
+
+<div class="stage">
+  <div class="clock" id="clock">00:00:00</div>
+  <div class="date" id="date">—</div>
+
+  <div class="radar-wrap">
+    <div class="ring"></div>
+    <div class="ring r2"></div>
+    <div class="ring r3"></div>
+    <div class="ring r4"></div>
+    <div class="sweep"></div>
+    <div class="core">JEROME</div>
+  </div>
+
+  <div class="status">STATUS: <b>ONLINE</b></div>
+
+  <div class="corner tl" id="cpuStat">CPU —</div>
+  <div class="corner tr" id="netStat">NET —</div>
+  <div class="corner bl" id="memStat">MEM —</div>
+  <div class="corner br" id="tempStat">88°F</div>
+</div>
+
+<script>
+function tick(){
+  const now = new Date();
+  document.getElementById('clock').textContent = now.toLocaleTimeString([], {hour12:false});
+  document.getElementById('date').textContent = now.toDateString().toUpperCase();
+}
+setInterval(tick, 1000); tick();
+
+// Placeholder system stats — once the Pi hub backend exists, replace this
+// with a fetch() to that local endpoint instead of random numbers.
+function rnd(min,max){ return Math.floor(Math.random()*(max-min)+min); }
+function updateStats(){
+  document.getElementById('cpuStat').textContent = 'CPU ' + rnd(15,60) + '%';
+  document.getElementById('netStat').textContent = 'NET ' + rnd(5,90) + 'Mb/s';
+  document.getElementById('memStat').textContent = 'MEM ' + rnd(30,75) + '%';
+}
+setInterval(updateStats, 3000); updateStats();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <!-- Must end in "-windows" for System.Speech to work. Matches whatever major .NET
+         version is actually installed on your machine (run "dotnet version" with no
+         dashes to check) — change if it reports something else, e.g. net8.0-windows. -->
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Audio playback for the ElevenLabs voice line -->
+    <PackageReference Include="NAudio" Version="2.2.1" />
+    <!-- Windows built-in speech recognition, for the "Hey Jerome" wake word -->
+    <PackageReference Include="System.Speech" Version="8.0.0" />
+  </ItemGroup>
+
+</Project>

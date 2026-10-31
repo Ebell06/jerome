@@ -1,0 +1,936 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>JEROME // OPTIMAL ENGINE</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Orbitron:wght@500;700;900&display=swap');
+
+  :root{
+    --bg: #0a0806;
+    --bg2: #120d09;
+    --panel: rgba(255,255,255,0.02);
+    --line: rgba(255,255,255,0.09);
+    --line-dim: rgba(255,255,255,0.04);
+    --text: #d8cfc4;
+    --text-dim: #7a6f63;
+    --primary: #39ff6a;
+    --orange: #a6ff3d;
+    --pink: #ff4f7b;
+    --green: #4dffa8;
+    --blue: #4fa8ff;
+    --yellow: #ffd24f;
+    --teal: #4fd8d0;
+  }
+  *{ box-sizing:border-box; margin:0; padding:0; }
+  html,body{ height:100%; }
+  body{
+    background: radial-gradient(ellipse at 55% 45%, #17110b 0%, var(--bg) 65%);
+    color: var(--text);
+    font-family: 'Space Mono', monospace;
+    overflow: hidden;
+  }
+
+  .app{
+    height:100vh; width:100vw;
+    display:grid;
+    grid-template-columns: 200px 1fr 220px;
+    grid-template-rows: 64px 1fr 240px;
+    gap: 1px;
+    position: relative; z-index: 1;
+  }
+  #matrixCanvas{ position:fixed; inset:0; z-index:0; opacity:0.45; }
+
+  .boot-overlay{
+    position:fixed; inset:0; z-index:100;
+    background:#050805;
+    display:flex; align-items:center; justify-content:center;
+    transition: opacity 0.8s ease;
+  }
+  .boot-overlay.fade-out{ opacity:0; pointer-events:none; }
+  .boot-lines{
+    width:min(700px, 88vw); font-size:12px; line-height:1.9; color:var(--primary);
+    text-shadow:0 0 6px rgba(57,255,106,0.5);
+  }
+  .boot-lines div{ opacity:0; animation: bootFadeIn 0.15s ease forwards; }
+  .boot-lines .ok{ color:var(--primary); }
+  @keyframes bootFadeIn{ to{ opacity:1; } }
+
+  /* ---- Top bar ---- */
+  .topbar{
+    grid-column: 1 / 4; grid-row: 1;
+    display:flex; align-items:center; gap:16px;
+    padding: 0 20px;
+    border-bottom: 1px solid var(--line);
+    background: var(--bg2);
+  }
+  .logo{ font-family:'Orbitron', sans-serif; font-weight:900; font-size:14px; letter-spacing:3px; color:var(--primary); text-shadow:0 0 10px rgba(57,255,106,0.6); }
+  .breadcrumb{ font-size:11px; color:var(--text-dim); letter-spacing:1px; }
+  .brain-input{
+    flex:1; margin-left:20px;
+    background: rgba(255,255,255,0.03);
+    border:1px solid var(--line);
+    border-radius:4px;
+    padding:8px 14px;
+    display:flex; flex-direction:column; justify-content:center;
+  }
+  .brain-input .ph{ font-size:12px; color:var(--text-dim); }
+  .brain-input .sub{ font-size:10px; color:var(--text-dim); opacity:0.6; margin-top:2px; letter-spacing:1px; }
+
+  /* ---- Left sidebar ---- */
+  .sidebar{
+    grid-column:1; grid-row:2 / 4;
+    background: var(--bg2);
+    border-right: 1px solid var(--line);
+    padding: 18px 0;
+    overflow:hidden;
+  }
+  .nav-item{
+    font-size:11px; letter-spacing:1px; color:var(--text-dim);
+    padding: 9px 20px; cursor:default;
+    border-left: 2px solid transparent;
+  }
+  .nav-item.active{ color:var(--primary); border-left-color:var(--primary); background:rgba(57,255,106,0.08); }
+
+  /* ---- Center graph ---- */
+  .graph-stage{ grid-column:2; grid-row:2; position:relative; overflow:hidden; }
+  .graph-stage svg{ width:100%; height:100%; }
+  .node-label{
+    position:absolute; transform: translate(-50%, 14px);
+    font-size:10px; letter-spacing:1px; color:var(--text-dim);
+    text-align:center; pointer-events:none; white-space:nowrap;
+  }
+  .node-label b{ display:block; font-size:10px; }
+
+  /* ---- Right directory panel ---- */
+  .directory{
+    grid-column:3; grid-row:2;
+    background: var(--bg2);
+    border-left: 1px solid var(--line);
+    padding: 16px;
+    overflow:hidden;
+  }
+  .directory h4{ font-size:10px; letter-spacing:3px; color:var(--primary); font-family:'Orbitron',sans-serif; margin-bottom:10px; }
+  .dir-item{ display:flex; align-items:center; gap:8px; font-size:10px; color:var(--text-dim); padding:6px 0; border-bottom:1px solid var(--line-dim); letter-spacing:0.5px; }
+  .dir-item .rb-dot{ cursor:pointer; font-size:11px; flex-shrink:0; }
+  .dir-item .rb-name{ color:var(--text); flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .dir-item .rb-gps{ font-size:8px; color:var(--text-dim); }
+  .dir-item .rb-del{ cursor:pointer; color:var(--text-dim); font-size:9px; }
+  .dir-item .rb-del:hover{ color:#ff6b6b; }
+
+  /* ---- Bottom strip: live panels ---- */
+  .footer{ grid-column: 1 / 4; grid-row:3; display:grid; grid-template-columns: 1.4fr 1.4fr 220px; gap:1px; border-top:1px solid var(--line); background: var(--bg2); }
+  .fpanel{ position:relative; padding:10px 14px; overflow:hidden; }
+  .fpanel h5{ font-size:9px; letter-spacing:2px; color:var(--primary); font-family:'Orbitron',sans-serif; margin-bottom:6px; }
+  #radarFrame{ width:100%; height:190px; border:0; filter: invert(0.92) hue-rotate(180deg) contrast(1.05) saturate(0.8); border-radius:3px; }
+  #flightMap{ width:100%; height:190px; border-radius:3px; filter: invert(0.92) hue-rotate(180deg) brightness(0.95) contrast(1.05); }
+  .flight-count{ position:absolute; top:10px; right:16px; font-size:9px; color:var(--yellow); z-index:5; }
+
+  .tasks-panel{
+    position:absolute; inset:0; z-index:3;
+    background: rgba(6,10,6,0.94);
+    border:1px solid rgba(57,255,106,0.3);
+    display:none; flex-direction:column; padding:18px;
+  }
+  .tasks-panel.visible{ display:flex; }
+  .tasks-header{ display:flex; align-items:center; gap:14px; margin-bottom:14px; }
+  .tasks-header span{ font-family:'Orbitron',sans-serif; font-size:13px; letter-spacing:3px; color:var(--primary); }
+  .tasks-header input{
+    flex:1; background:rgba(57,255,106,0.06); border:1px solid rgba(57,255,106,0.25);
+    color:var(--text); font-family:'Space Mono',monospace; font-size:12px; padding:8px 10px; outline:none;
+  }
+  .task-list{ flex:1; overflow-y:auto; }
+  .task-row{ display:flex; align-items:center; gap:10px; padding:8px 4px; border-bottom:1px solid rgba(255,255,255,0.06); font-size:12px; }
+  .task-row.done .task-text{ text-decoration:line-through; color:var(--text-dim); }
+  .task-row .task-text{ flex:1; }
+  .task-row input[type=checkbox]{ accent-color: var(--primary); width:14px; height:14px; }
+  .task-row .del{ color:var(--text-dim); cursor:pointer; font-size:11px; }
+  .task-row .del:hover{ color:#ff6b6b; }
+  .task-empty{ color:var(--text-dim); font-size:11px; padding:10px 4px; }
+
+  .ticker-row{ display:flex; justify-content:space-between; font-size:10px; padding:2px 0; color:var(--text-dim); }
+  .ticker-sym{ color:var(--text); font-weight:700; }
+  .up{ color:var(--green); } .down{ color:var(--pink); }
+</style>
+</head>
+<body>
+<canvas id="matrixCanvas"></canvas>
+
+<div id="bootOverlay" class="boot-overlay">
+  <div id="bootLines" class="boot-lines"></div>
+</div>
+
+<div class="app">
+
+  <div class="topbar">
+    <div class="logo">JEROME</div>
+    <div class="breadcrumb">jerome / optimal-engine</div>
+    <div class="brain-input">
+      <div class="ph">dump into the brain... or drop documents</div>
+      <div class="sub">text · voice · drag or upload</div>
+    </div>
+  </div>
+
+  <div class="sidebar">
+    <div class="nav-item" data-cat="" data-view="home">Home</div>
+    <div class="nav-item" data-cat="Communications">Comms</div>
+    <div class="nav-item" data-cat="" data-view="workflows">Workflows</div>
+    <div class="nav-item" data-cat="Finances">Finances</div>
+    <div class="nav-item" data-cat="" data-view="agents">Agents</div>
+    <div class="nav-item" data-cat="" data-view="tasks">Tasks</div>
+    <div class="nav-item" data-cat="" data-view="school">School</div>
+    <div class="nav-item" data-cat="" data-view="projects">Projects</div>
+    <div class="nav-item" data-cat="" data-view="orgchart">Org Chart</div>
+    <div class="nav-item active" data-cat="">Optimal Engine</div>
+    <div class="nav-item" data-cat="Clients">Connections</div>
+    <div class="nav-item" data-cat="" data-view="roadmap">Roadmap</div>
+    <div class="nav-item" data-cat="Marketing/Growth">Analytics</div>
+    <div class="nav-item" data-cat="Sales">Personas</div>
+  </div>
+
+  <div class="graph-stage" id="graphStage">
+    <svg id="graphSvg" viewBox="0 0 1000 620" preserveAspectRatio="xMidYMid meet"></svg>
+
+    <div id="tasksPanel" class="tasks-panel">
+      <div class="tasks-header">
+        <span>TASKS</span>
+        <input id="taskInput" type="text" placeholder="Add a task and press Enter..." />
+      </div>
+      <div id="taskList" class="task-list"></div>
+    </div>
+
+    <div id="workflowsPanel" class="tasks-panel">
+      <div class="tasks-header">
+        <span>WORKFLOWS</span>
+        <input id="workflowInput" type="text" placeholder="Add a workflow step and press Enter..." />
+      </div>
+      <div id="workflowList" class="task-list"></div>
+    </div>
+
+    <div id="agentsPanel" class="tasks-panel">
+      <div class="tasks-header">
+        <span>AGENTS</span>
+        <input id="agentInput" type="text" placeholder="Add agent as Name / Role and press Enter..." />
+      </div>
+      <div id="agentList" class="task-list"></div>
+    </div>
+
+    <div id="roadmapPanel" class="tasks-panel">
+      <div class="tasks-header">
+        <span>ROADMAP</span>
+        <input id="roadmapInput" type="text" placeholder="Add milestone as Text / YYYY-MM-DD and press Enter..." />
+      </div>
+      <div id="roadmapList" class="task-list"></div>
+    </div>
+
+    <div id="schoolPanel" class="tasks-panel">
+      <div class="tasks-header">
+        <span>SCHOOL</span>
+        <input id="schoolInput" type="text" placeholder="Add as Class / Assignment / YYYY-MM-DD and press Enter..." />
+      </div>
+      <div id="schoolList" class="task-list"></div>
+    </div>
+
+    <div id="projectsPanel" class="tasks-panel">
+      <div class="tasks-header">
+        <span>PROJECTS</span>
+        <input id="projectInput" type="text" placeholder="Add as Project / Type (e.g. Robot Arm / Robotics) and press Enter..." />
+      </div>
+      <div id="projectList" class="task-list"></div>
+    </div>
+
+    <div id="orgchartPanel" class="tasks-panel">
+      <div class="tasks-header"><span>ORG CHART</span></div>
+      <svg id="orgSvg" viewBox="0 0 1000 500" style="width:100%; height:100%;"></svg>
+    </div>
+
+    <div id="homePanel" class="tasks-panel">
+      <div class="tasks-header"><span>HOME</span></div>
+      <div id="homeBody" class="task-list"></div>
+    </div>
+  </div>
+
+  <div class="directory">
+    <h4>ROBOTICS MONITOR</h4>
+    <div id="robotsStatus" style="font-size:9px; color:var(--text-dim); margin-bottom:8px;">— no hub connected, manual mode —</div>
+    <input id="robotInput" type="text" placeholder="Add as Name / Type / lat,lon (optional)"
+      style="width:100%; background:rgba(57,255,106,0.06); border:1px solid rgba(57,255,106,0.25); color:var(--text); font-family:'Space Mono',monospace; font-size:10px; padding:6px 8px; outline:none; margin-bottom:10px;" />
+    <div id="dirList"></div>
+  </div>
+
+  <div class="footer">
+    <div class="fpanel">
+      <h5>WEATHER RADAR</h5>
+      <iframe id="radarFrame" frameborder="0"
+        src="https://embed.windy.com/embed2.html?lat=29.4241&lon=-98.4936&detailLat=29.4241&detailLon=-98.4936&width=650&height=200&zoom=6&level=surface&overlay=radar&menu=&message=false&marker=&calendar=&pressure=&type=map&location=coordinates&detail=&metricWind=default&metricTemp=default&radarRange=-1">
+      </iframe>
+    </div>
+    <div class="fpanel">
+      <h5>FLIGHT TRACKER</h5>
+      <div class="flight-count" id="flightCount">— aircraft</div>
+      <div id="flightMap"></div>
+    </div>
+    <div class="fpanel" id="stocksPanel">
+      <h5>MARKETS</h5>
+    </div>
+  </div>
+
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+// ---------- Boot sequence ----------
+(function(){
+  const lines = [
+    "[ OK ] Initializing JEROME core...",
+    "[ OK ] Loading knowledge graph modules...",
+    "[ OK ] Mounting local storage...",
+    "[ OK ] Establishing uplink to Raspberry Pi hub... (manual mode)",
+    "[ OK ] Calibrating radar array...",
+    "[ OK ] Verifying agent roster...",
+    "[ OK ] Speech synthesis ready...",
+    "[ OK ] All systems nominal.",
+    "",
+    "Welcome back. Jerome here. How can I help you, boss?"
+  ];
+  const container = document.getElementById('bootLines');
+  const overlay = document.getElementById('bootOverlay');
+  lines.forEach((text, i) => {
+    const div = document.createElement('div');
+    div.style.animationDelay = (i * 0.28) + 's';
+    if(text.startsWith('[ OK ]')){
+      div.innerHTML = `<span class="ok">[ OK ]</span>${text.slice(6)}`;
+    } else {
+      div.textContent = text;
+    }
+    container.appendChild(div);
+  });
+  const totalDelay = lines.length * 280 + 900;
+  setTimeout(() => {
+    overlay.classList.add('fade-out');
+    setTimeout(() => overlay.remove(), 900);
+  }, totalDelay);
+})();
+
+// ---------- Matrix digital rain background ----------
+(function(){
+  const canvas = document.getElementById('matrixCanvas');
+  const ctx = canvas.getContext('2d');
+  let w, h, cols, drops;
+  const chars = 'ｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿ0123456789ABCDEFJEROME';
+  function resize(){
+    w = canvas.width = window.innerWidth;
+    h = canvas.height = window.innerHeight;
+    cols = Math.floor(w/16);
+    drops = new Array(cols).fill(0).map(()=>Math.random()*-50);
+  }
+  window.addEventListener('resize', resize);
+  resize();
+  function draw(){
+    ctx.fillStyle = 'rgba(5,10,5,0.12)';
+    ctx.fillRect(0,0,w,h);
+    ctx.fillStyle = '#39ff6a';
+    ctx.font = '14px monospace';
+    drops.forEach((y,i)=>{
+      const char = chars[Math.floor(Math.random()*chars.length)];
+      ctx.fillText(char, i*16, y*16);
+      drops[i] = (y*16 > h && Math.random() > 0.975) ? 0 : y + 1;
+    });
+  }
+  setInterval(draw, 50);
+})();
+
+// ================= CONFIG =================
+const CENTER_LAT = 29.4241, CENTER_LON = -98.4936; // San Antonio, TX
+const FLIGHT_BOX_DEG = 3.5;
+// ============================================
+
+// ---------------- Knowledge graph ----------------
+const svgNS = "http://www.w3.org/2000/svg";
+const svg = document.getElementById('graphSvg');
+const stage = document.getElementById('graphStage');
+const CX = 500, CY = 310;
+
+const categories = [
+  { name:"Sales",                color:"var(--pink)",   angle:-90  },
+  { name:"Product",              color:"var(--orange)", angle:-45  },
+  { name:"Finances",             color:"var(--green)",  angle:0    },
+  { name:"Clients",              color:"var(--teal)",   angle:45   },
+  { name:"Marketing/Growth",     color:"var(--yellow)", angle:90   },
+  { name:"Tech",                 color:"var(--blue)",   angle:135  },
+  { name:"Communications",       color:"var(--blue)",   angle:180  },
+  { name:"Research/Automation",  color:"var(--text-dim)",angle:225 },
+];
+const R = 220;
+function pt(angleDeg, radius, cx=CX, cy=CY){
+  const a = angleDeg * Math.PI/180;
+  return { x: cx + radius*Math.cos(a), y: cy + radius*Math.sin(a) };
+}
+
+function line(x1,y1,x2,y2,color,opacity,dash){
+  const el = document.createElementNS(svgNS,'line');
+  el.setAttribute('x1',x1); el.setAttribute('y1',y1);
+  el.setAttribute('x2',x2); el.setAttribute('y2',y2);
+  el.setAttribute('stroke',color); el.setAttribute('stroke-width','1');
+  el.setAttribute('opacity',opacity);
+  if(dash) el.setAttribute('stroke-dasharray','3,3');
+  svg.appendChild(el);
+  return el;
+}
+function circle(x,y,r,color,opacity=1){
+  const el = document.createElementNS(svgNS,'circle');
+  el.setAttribute('cx',x); el.setAttribute('cy',y); el.setAttribute('r',r);
+  el.setAttribute('fill',color); el.setAttribute('opacity',opacity);
+  svg.appendChild(el);
+  return el;
+}
+
+// central particle cluster
+const clusterDots = [];
+for(let i=0;i<55;i++){
+  const rr = Math.random()*55;
+  const aa = Math.random()*Math.PI*2;
+  const x = CX + rr*Math.cos(aa), y = CY + rr*Math.sin(aa);
+  line(CX,CY,x,y,'#39ff6a',0.08);
+  const d = circle(x,y,1.4,'#39ff6a',0.5+Math.random()*0.5);
+  clusterDots.push(d);
+}
+circle(CX,CY,3,'#ffb38a',0.9);
+
+// category nodes + connecting lines + labels
+categories.forEach(cat=>{
+  const p = pt(cat.angle, R);
+  const lineEl = line(CX,CY,p.x,p.y,'rgba(255,255,255,0.15)',1);
+  const haloEl = circle(p.x,p.y,9,cat.color,0.15);
+  const dotEl = circle(p.x,p.y,4,cat.color,1);
+
+  const label = document.createElement('div');
+  label.className = 'node-label';
+  label.innerHTML = `<b style="color:${cat.color}">${cat.name}</b>`;
+  label.style.left = (p.x/1000*100)+'%';
+  label.style.top = (p.y/620*100)+'%';
+  label.style.transition = 'opacity 0.3s, transform 0.3s';
+  stage.appendChild(label);
+
+  cat.els = { lineEl, haloEl, dotEl, label, pt: p };
+});
+
+function highlightCategory(name){
+  categories.forEach(cat=>{
+    const on = !name || cat.name === name;
+    const { lineEl, haloEl, dotEl, label } = cat.els;
+    lineEl.setAttribute('opacity', on ? 1 : 0.08);
+    haloEl.setAttribute('opacity', on ? (name ? 0.35 : 0.15) : 0.05);
+    dotEl.setAttribute('r', (name && cat.name===name) ? 6 : 4);
+    dotEl.setAttribute('opacity', on ? 1 : 0.15);
+    label.style.opacity = on ? 1 : 0.2;
+    label.style.transform = (name && cat.name===name) ? 'translate(-50%, 14px) scale(1.15)' : 'translate(-50%, 14px) scale(1)';
+  });
+}
+
+// wire up sidebar nav clicks
+document.querySelectorAll('.nav-item').forEach(item=>{
+  item.addEventListener('click', ()=>{
+    document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+    item.classList.add('active');
+
+    const view = item.getAttribute('data-view');
+    if(view){
+      showView(view);
+      return;
+    }
+    showView(null);
+    const cat = item.getAttribute('data-cat');
+    highlightCategory(cat || null);
+  });
+});
+
+const ALL_VIEWS = ['tasks','workflows','agents','roadmap','school','projects','orgchart','home'];
+function showView(view){
+  ALL_VIEWS.forEach(v=>{
+    document.getElementById(v+'Panel').classList.toggle('visible', v===view);
+  });
+  document.getElementById('graphSvg').style.visibility = view ? 'hidden' : 'visible';
+  if(view==='tasks') renderTasks();
+  if(view==='workflows') renderWorkflows();
+  if(view==='agents') renderAgents();
+  if(view==='roadmap') renderRoadmap();
+  if(view==='school') renderSchool();
+  if(view==='projects') renderProjects();
+  if(view==='orgchart') renderOrgChart();
+  if(view==='home') renderHome();
+}
+
+// ---------------- Generic localStorage list helper ----------------
+function loadList(key){ try{ return JSON.parse(localStorage.getItem(key)||'[]'); } catch(e){ return []; } }
+function saveList(key, items){ localStorage.setItem(key, JSON.stringify(items)); }
+
+// ---------------- Tasks (synced with Jerome's voice commands via /api/tasks) ----------------
+const TASKS_KEY = 'jerome_tasks'; // fallback only, used if the API isn't reachable
+let tasksApiAvailable = true;
+
+async function loadTasks(){
+  try{
+    const res = await fetch('/api/tasks');
+    if(!res.ok) throw new Error('bad status');
+    const tasks = await res.json();
+    tasksApiAvailable = true;
+    return tasks;
+  }catch(e){
+    tasksApiAvailable = false; // standalone preview (no Jerome server) — fall back to localStorage
+    return loadList(TASKS_KEY);
+  }
+}
+async function saveTasks(tasks){
+  if(tasksApiAvailable){
+    try{
+      await fetch('/api/tasks', { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(tasks) });
+      return;
+    }catch(e){ /* fall through to localStorage below */ }
+  }
+  saveList(TASKS_KEY, tasks);
+}
+
+async function renderTasks(){
+  const tasks = await loadTasks();
+  const list = document.getElementById('taskList');
+  if(!tasksApiAvailable){
+    const note = document.createElement('div');
+  }
+  if(tasks.length===0){
+    list.innerHTML = `<div class="task-empty">No tasks yet — add one above${tasksApiAvailable ? ' or say "hey jerome add task ..."' : ''}.</div>`;
+    return;
+  }
+  list.innerHTML = tasks.map((t,i)=>`
+    <div class="task-row ${t.done?'done':''}">
+      <input type="checkbox" ${t.done?'checked':''} data-idx="${i}" class="tk-check" />
+      <span class="task-text">${t.text}</span>
+      <span class="del" data-idx="${i}">✕</span>
+    </div>`).join('');
+  list.querySelectorAll('.tk-check').forEach(cb=>cb.addEventListener('change', async ()=>{
+    const tasks = await loadTasks(); tasks[+cb.dataset.idx].done = cb.checked;
+    await saveTasks(tasks); renderTasks();
+  }));
+  list.querySelectorAll('.del').forEach(d=>d.addEventListener('click', async ()=>{
+    const tasks = await loadTasks(); tasks.splice(+d.dataset.idx,1);
+    await saveTasks(tasks); renderTasks();
+  }));
+}
+document.getElementById('taskInput').addEventListener('keydown', async e=>{
+  if(e.key==='Enter' && e.target.value.trim()){
+    const tasks = await loadTasks(); tasks.push({text:e.target.value.trim(), done:false});
+    await saveTasks(tasks); e.target.value=''; renderTasks();
+  }
+});
+// Poll every 5s so tasks added by voice (from a different "browser session" than
+// the page's own fetches) show up without needing a manual refresh.
+setInterval(()=>{ if(document.getElementById('tasksPanel')?.classList.contains('visible')) renderTasks(); }, 5000);
+
+// ---------------- Workflows (status cycles Todo -> Doing -> Done) ----------------
+const WORKFLOWS_KEY = 'jerome_workflows';
+const WF_STATUSES = ['Todo','Doing','Done'];
+const WF_COLORS = { Todo:'var(--text-dim)', Doing:'var(--yellow)', Done:'var(--green)' };
+function renderWorkflows(){
+  const items = loadList(WORKFLOWS_KEY);
+  const list = document.getElementById('workflowList');
+  if(items.length===0){ list.innerHTML = '<div class="task-empty">No workflow steps yet — add one above.</div>'; return; }
+  list.innerHTML = items.map((w,i)=>`
+    <div class="task-row">
+      <span class="wf-status" data-idx="${i}" style="cursor:pointer; color:${WF_COLORS[w.status]}; width:56px; font-size:10px; letter-spacing:1px;">${w.status}</span>
+      <span class="task-text">${w.text}</span>
+      <span class="del" data-idx="${i}">✕</span>
+    </div>`).join('');
+  list.querySelectorAll('.wf-status').forEach(s=>s.addEventListener('click', ()=>{
+    const items = loadList(WORKFLOWS_KEY);
+    const cur = WF_STATUSES.indexOf(items[+s.dataset.idx].status);
+    items[+s.dataset.idx].status = WF_STATUSES[(cur+1)%WF_STATUSES.length];
+    saveList(WORKFLOWS_KEY, items); renderWorkflows();
+  }));
+  list.querySelectorAll('.del').forEach(d=>d.addEventListener('click', ()=>{
+    const items = loadList(WORKFLOWS_KEY); items.splice(+d.dataset.idx,1);
+    saveList(WORKFLOWS_KEY, items); renderWorkflows();
+  }));
+}
+document.getElementById('workflowInput').addEventListener('keydown', e=>{
+  if(e.key==='Enter' && e.target.value.trim()){
+    const items = loadList(WORKFLOWS_KEY); items.push({text:e.target.value.trim(), status:'Todo'});
+    saveList(WORKFLOWS_KEY, items); e.target.value=''; renderWorkflows();
+  }
+});
+
+// ---------------- Agents (Name / Role, toggle online-offline) ----------------
+const AGENTS_KEY = 'jerome_agents';
+function renderAgents(){
+  const items = loadList(AGENTS_KEY);
+  const list = document.getElementById('agentList');
+  if(items.length===0){ list.innerHTML = '<div class="task-empty">No agents yet — add one above as Name / Role.</div>'; return; }
+  list.innerHTML = items.map((a,i)=>`
+    <div class="task-row">
+      <span class="ag-dot" data-idx="${i}" style="cursor:pointer; color:${a.online?'var(--green)':'var(--text-dim)'};">●</span>
+      <span class="task-text">${a.name}<span style="color:var(--text-dim);"> — ${a.role}</span></span>
+      <span class="del" data-idx="${i}">✕</span>
+    </div>`).join('');
+  list.querySelectorAll('.ag-dot').forEach(dot=>dot.addEventListener('click', ()=>{
+    const items = loadList(AGENTS_KEY); items[+dot.dataset.idx].online = !items[+dot.dataset.idx].online;
+    saveList(AGENTS_KEY, items); renderAgents();
+  }));
+  list.querySelectorAll('.del').forEach(d=>d.addEventListener('click', ()=>{
+    const items = loadList(AGENTS_KEY); items.splice(+d.dataset.idx,1);
+    saveList(AGENTS_KEY, items); renderAgents();
+  }));
+}
+document.getElementById('agentInput').addEventListener('keydown', e=>{
+  if(e.key==='Enter' && e.target.value.trim()){
+    const parts = e.target.value.split('/');
+    const name = (parts[0]||'').trim() || 'Unnamed';
+    const role = (parts[1]||'Agent').trim();
+    const items = loadList(AGENTS_KEY); items.push({name, role, online:true});
+    saveList(AGENTS_KEY, items); e.target.value=''; renderAgents();
+  }
+});
+
+// ---------------- Roadmap (Text / Date) ----------------
+const ROADMAP_KEY = 'jerome_roadmap';
+function renderRoadmap(){
+  const items = loadList(ROADMAP_KEY).sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+  const list = document.getElementById('roadmapList');
+  if(items.length===0){ list.innerHTML = '<div class="task-empty">No milestones yet — add one above as Text / YYYY-MM-DD.</div>'; return; }
+  list.innerHTML = items.map((m,i)=>`
+    <div class="task-row">
+      <span style="width:80px; color:var(--primary); font-size:10px;">${m.date||'—'}</span>
+      <span class="task-text">${m.text}</span>
+      <span class="del" data-idx="${i}">✕</span>
+    </div>`).join('');
+  list.querySelectorAll('.del').forEach(d=>d.addEventListener('click', ()=>{
+    const items = loadList(ROADMAP_KEY); items.splice(+d.dataset.idx,1);
+    saveList(ROADMAP_KEY, items); renderRoadmap();
+  }));
+}
+document.getElementById('roadmapInput').addEventListener('keydown', e=>{
+  if(e.key==='Enter' && e.target.value.trim()){
+    const parts = e.target.value.split('/');
+    const text = (parts[0]||'').trim();
+    const date = (parts[1]||'').trim();
+    const items = loadList(ROADMAP_KEY); items.push({text, date});
+    saveList(ROADMAP_KEY, items); e.target.value=''; renderRoadmap();
+  }
+});
+
+// ---------------- School (Class / Assignment / Due date) ----------------
+const SCHOOL_KEY = 'jerome_school';
+function renderSchool(){
+  const items = loadList(SCHOOL_KEY).sort((a,b)=>(a.due||'').localeCompare(b.due||''));
+  const list = document.getElementById('schoolList');
+  if(items.length===0){ list.innerHTML = '<div class="task-empty">No classes/assignments yet — add one above.</div>'; return; }
+  list.innerHTML = items.map((s,i)=>`
+    <div class="task-row ${s.done?'done':''}">
+      <input type="checkbox" ${s.done?'checked':''} data-idx="${i}" class="sc-check" />
+      <span style="width:90px; color:var(--teal); font-size:10px;">${s.cls}</span>
+      <span class="task-text">${s.assignment}</span>
+      <span style="width:80px; color:var(--primary); font-size:10px; text-align:right;">${s.due||'—'}</span>
+      <span class="del" data-idx="${i}">✕</span>
+    </div>`).join('');
+  list.querySelectorAll('.sc-check').forEach(cb=>cb.addEventListener('change', ()=>{
+    const items = loadList(SCHOOL_KEY); items[+cb.dataset.idx].done = cb.checked;
+    saveList(SCHOOL_KEY, items); renderSchool();
+  }));
+  list.querySelectorAll('.del').forEach(d=>d.addEventListener('click', ()=>{
+    const items = loadList(SCHOOL_KEY); items.splice(+d.dataset.idx,1);
+    saveList(SCHOOL_KEY, items); renderSchool();
+  }));
+}
+document.getElementById('schoolInput').addEventListener('keydown', e=>{
+  if(e.key==='Enter' && e.target.value.trim()){
+    const parts = e.target.value.split('/');
+    const cls = (parts[0]||'').trim() || 'General';
+    const assignment = (parts[1]||'').trim() || '(untitled)';
+    const due = (parts[2]||'').trim();
+    const items = loadList(SCHOOL_KEY); items.push({cls, assignment, due, done:false});
+    saveList(SCHOOL_KEY, items); e.target.value=''; renderSchool();
+  }
+});
+
+// ---------------- Personal Projects (Project / Type, build-stage status) ----------------
+// Fields are set up so this can later map onto real hardware once the Pi 5 hub is running
+// (e.g. type: "Robotics", "Arduino", "Drone" — status tracks build progress).
+const PROJECTS_KEY = 'jerome_projects';
+const PROJ_STAGES = ['Idea','Building','Testing','Done'];
+const PROJ_COLORS = { Idea:'var(--text-dim)', Building:'var(--yellow)', Testing:'var(--teal)', Done:'var(--green)' };
+function renderProjects(){
+  const items = loadList(PROJECTS_KEY);
+  const list = document.getElementById('projectList');
+  if(items.length===0){ list.innerHTML = '<div class="task-empty">No projects yet — add one above, e.g. "Robot Arm / Robotics".</div>'; return; }
+  list.innerHTML = items.map((p,i)=>`
+    <div class="task-row">
+      <span class="pj-stage" data-idx="${i}" style="cursor:pointer; color:${PROJ_COLORS[p.stage]}; width:64px; font-size:10px; letter-spacing:1px;">${p.stage}</span>
+      <span class="task-text">${p.name}<span style="color:var(--text-dim);"> — ${p.type}</span></span>
+      <span class="del" data-idx="${i}">✕</span>
+    </div>`).join('');
+  list.querySelectorAll('.pj-stage').forEach(s=>s.addEventListener('click', ()=>{
+    const items = loadList(PROJECTS_KEY);
+    const cur = PROJ_STAGES.indexOf(items[+s.dataset.idx].stage);
+    items[+s.dataset.idx].stage = PROJ_STAGES[(cur+1)%PROJ_STAGES.length];
+    saveList(PROJECTS_KEY, items); renderProjects();
+  }));
+  list.querySelectorAll('.del').forEach(d=>d.addEventListener('click', ()=>{
+    const items = loadList(PROJECTS_KEY); items.splice(+d.dataset.idx,1);
+    saveList(PROJECTS_KEY, items); renderProjects();
+  }));
+}
+document.getElementById('projectInput').addEventListener('keydown', e=>{
+  if(e.key==='Enter' && e.target.value.trim()){
+    const parts = e.target.value.split('/');
+    const name = (parts[0]||'').trim() || 'Untitled Project';
+    const type = (parts[1]||'General').trim();
+    const items = loadList(PROJECTS_KEY); items.push({name, type, stage:'Idea'});
+    saveList(PROJECTS_KEY, items); e.target.value=''; renderProjects();
+  }
+});
+
+// ---------------- Org Chart (visual tree, mirrors the knowledge graph categories) ----------------
+function renderOrgChart(){
+  const svg = document.getElementById('orgSvg');
+  svg.innerHTML = '';
+  const topX = 500, topY = 50;
+  const leadY = 220;
+  const leadColors = categories.map(c=>c.color);
+  const n = categories.length;
+  const spacing = 900/(n-1);
+  function oline(x1,y1,x2,y2,color,op=1){
+    const el = document.createElementNS(svgNS,'line');
+    el.setAttribute('x1',x1); el.setAttribute('y1',y1); el.setAttribute('x2',x2); el.setAttribute('y2',y2);
+    el.setAttribute('stroke',color); el.setAttribute('stroke-width','1'); el.setAttribute('opacity',op);
+    svg.appendChild(el);
+  }
+  function ocirc(x,y,r,color){
+    const el = document.createElementNS(svgNS,'circle');
+    el.setAttribute('cx',x); el.setAttribute('cy',y); el.setAttribute('r',r); el.setAttribute('fill',color);
+    svg.appendChild(el);
+  }
+  function otext(x,y,txt,color,size=11){
+    const el = document.createElementNS(svgNS,'text');
+    el.setAttribute('x',x); el.setAttribute('y',y); el.setAttribute('fill',color);
+    el.setAttribute('font-size',size); el.setAttribute('text-anchor','middle'); el.setAttribute('font-family','Space Mono, monospace');
+    el.textContent = txt;
+    svg.appendChild(el);
+  }
+  ocirc(topX, topY, 7, 'var(--primary)');
+  otext(topX, topY-14, 'JEROME', 'var(--primary)', 12);
+  categories.forEach((cat,i)=>{
+    const x = 50 + i*spacing;
+    oline(topX, topY+8, x, leadY-10, 'rgba(255,255,255,0.15)');
+    ocirc(x, leadY, 5, cat.color);
+    otext(x, leadY+18, cat.name.split('/')[0], cat.color, 10);
+    otext(x, leadY+34, 'Lead', 'var(--text-dim)', 9);
+    oline(x, leadY+8, x, leadY+55, 'rgba(255,255,255,0.1)', 1);
+    ocirc(x, leadY+62, 3, 'var(--text-dim)');
+    otext(x, leadY+78, 'Team', 'var(--text-dim)', 8);
+  });
+}
+
+// ---------------- Home dashboard ----------------
+async function renderHome(){
+  const tasks = await loadTasks();
+  const workflows = loadList(WORKFLOWS_KEY);
+  const roadmap = loadList(ROADMAP_KEY);
+  const agents = loadList(AGENTS_KEY);
+  const school = loadList(SCHOOL_KEY);
+  const projects = loadList(PROJECTS_KEY);
+  const openTasks = tasks.filter(t=>!t.done).length;
+  const doingWf = workflows.filter(w=>w.status==='Doing').length;
+  const onlineAgents = agents.filter(a=>a.online).length;
+  const openSchool = school.filter(s=>!s.done).length;
+  const activeProjects = projects.filter(p=>p.stage!=='Done').length;
+  const now = new Date();
+  document.getElementById('homeBody').innerHTML = `
+    <div style="padding:10px 4px; font-size:13px; color:var(--text);">
+      ${now.toLocaleTimeString([], {hour12:false})} — ${now.toDateString()}
+    </div>
+    <div class="task-row"><span class="task-text">Open tasks</span><span style="color:var(--primary);">${openTasks}</span></div>
+    <div class="task-row"><span class="task-text">Workflows in progress</span><span style="color:var(--yellow);">${doingWf}</span></div>
+    <div class="task-row"><span class="task-text">Agents online</span><span style="color:var(--green);">${onlineAgents} / ${agents.length}</span></div>
+    <div class="task-row"><span class="task-text">Upcoming milestones</span><span style="color:var(--primary);">${roadmap.length}</span></div>
+    <div class="task-row"><span class="task-text">Open assignments</span><span style="color:var(--teal);">${openSchool}</span></div>
+    <div class="task-row"><span class="task-text">Active personal projects</span><span style="color:var(--yellow);">${activeProjects}</span></div>
+    <div style="margin-top:16px; font-size:10px; color:var(--text-dim); letter-spacing:1px;">Click a tab on the left to jump in.</div>
+  `;
+}
+
+// expanded branch example: Communications
+const comms = categories.find(c=>c.name==="Communications");
+const commsPt = pt(comms.angle, R);
+const subAgents = ["Comms Agent","Slack Worker","Mia Torres","WhatsApp","Gmail"];
+const subSpacing = 95;
+subAgents.forEach((name,i)=>{
+  const bx = commsPt.x + (i - (subAgents.length-1)/2) * subSpacing - 40;
+  const by = commsPt.y + 90;
+  line(commsPt.x,commsPt.y,bx,by,'rgba(79,168,255,0.35)',1);
+  circle(bx,by,5,'var(--blue)',0.8);
+  const taskY = by + 55;
+  line(bx,by,bx,taskY,'rgba(255,255,255,0.15)',1,true);
+  circle(bx,taskY,2,'#ffffff',0.5);
+
+  const lbl = document.createElement('div');
+  lbl.className='node-label';
+  lbl.innerHTML = `<b style="color:var(--blue); font-size:9px;">${name}</b>`;
+  lbl.style.left = (bx/1000*100)+'%';
+  lbl.style.top = (by/620*100)+'%';
+  stage.appendChild(lbl);
+});
+const obsidianY = commsPt.y + 175;
+line(commsPt.x, commsPt.y+90+30, commsPt.x, obsidianY, 'rgba(255,255,255,0.15)',1,true);
+circle(commsPt.x, obsidianY, 6, 'var(--blue)', 0.6);
+const oLbl = document.createElement('div');
+oLbl.className='node-label';
+oLbl.innerHTML = `<b style="color:var(--text-dim); font-size:9px;">Obsidian</b>`;
+oLbl.style.left = (commsPt.x/1000*100)+'%';
+oLbl.style.top = (obsidianY/620*100)+'%';
+stage.appendChild(oLbl);
+
+// gentle pulse on cluster dots
+function pulse(){
+  clusterDots.forEach(d=>{
+    const target = 0.3 + Math.random()*0.7;
+    d.style.transition = 'opacity 1.8s ease';
+    d.setAttribute('opacity', target);
+  });
+}
+setInterval(pulse, 1800); pulse();
+
+// ---------------- Robotics Monitor ----------------
+// Once the Raspberry Pi 5 hub is running, point PI_HUB_URL at it (e.g. "http://192.168.1.50:5000/status")
+// and have it serve JSON like: [{ "name":"Robot Arm", "type":"Robotics", "status":"online", "lat":29.42, "lon":-98.49 }, ...]
+// Until then, this runs in manual mode: entries you add are saved locally and you toggle their status by hand.
+const PI_HUB_URL = ""; // e.g. "http://raspberrypi.local:5000/status"
+const ROBOTS_KEY = 'jerome_robots';
+const RB_STATUSES = ['online','error','offline'];
+const RB_COLORS = { online:'var(--green)', error:'#ff6b6b', offline:'var(--text-dim)' };
+const RB_SYMBOL = { online:'●', error:'▲', offline:'○' };
+
+function renderRobots(list, live){
+  document.getElementById('robotsStatus').textContent = live
+    ? `— live from Pi hub, ${list.length} device(s) —`
+    : `— no hub connected, manual mode (${list.length}) —`;
+  const el = document.getElementById('dirList');
+  if(list.length===0){
+    el.innerHTML = '<div style="font-size:9px; color:var(--text-dim); padding:6px 0;">No robots added yet.</div>';
+    return;
+  }
+  el.innerHTML = list.map((r,i)=>{
+    const gps = (r.lat!=null && r.lon!=null) ? `${r.lat.toFixed?r.lat.toFixed(2):r.lat}, ${r.lon.toFixed?r.lon.toFixed(2):r.lon}` : '';
+    return `<div class="dir-item">
+      <span class="rb-dot" data-idx="${i}" style="color:${RB_COLORS[r.status]||RB_COLORS.offline}">${RB_SYMBOL[r.status]||RB_SYMBOL.offline}</span>
+      <span class="rb-name">${r.name}<span style="color:var(--text-dim);"> · ${r.type||'Device'}</span></span>
+      ${gps ? `<span class="rb-gps">${gps}</span>` : ''}
+      ${live ? '' : `<span class="rb-del" data-idx="${i}">✕</span>`}
+    </div>`;
+  }).join('');
+
+  if(!live){
+    el.querySelectorAll('.rb-dot').forEach(dot=>dot.addEventListener('click', ()=>{
+      const items = loadList(ROBOTS_KEY);
+      const cur = RB_STATUSES.indexOf(items[+dot.dataset.idx].status);
+      items[+dot.dataset.idx].status = RB_STATUSES[(cur+1)%RB_STATUSES.length];
+      saveList(ROBOTS_KEY, items); renderRobots(items, false);
+    }));
+    el.querySelectorAll('.rb-del').forEach(d=>d.addEventListener('click', ()=>{
+      const items = loadList(ROBOTS_KEY); items.splice(+d.dataset.idx,1);
+      saveList(ROBOTS_KEY, items); renderRobots(items, false);
+    }));
+  }
+}
+
+async function refreshRobots(){
+  if(PI_HUB_URL){
+    try{
+      const res = await fetch(PI_HUB_URL);
+      const data = await res.json();
+      renderRobots(data, true);
+      return;
+    }catch(e){
+      // Pi unreachable — fall through to manual/local list
+    }
+  }
+  renderRobots(loadList(ROBOTS_KEY), false);
+}
+document.getElementById('robotInput').addEventListener('keydown', e=>{
+  if(e.key==='Enter' && e.target.value.trim()){
+    const parts = e.target.value.split('/');
+    const name = (parts[0]||'').trim() || 'Unnamed';
+    const type = (parts[1]||'Device').trim();
+    let lat=null, lon=null;
+    if(parts[2]){
+      const gp = parts[2].split(',');
+      if(gp.length===2){ lat = parseFloat(gp[0]); lon = parseFloat(gp[1]); }
+    }
+    const items = loadList(ROBOTS_KEY);
+    items.push({name, type, status:'offline', lat, lon});
+    saveList(ROBOTS_KEY, items);
+    e.target.value = '';
+    refreshRobots();
+  }
+});
+setInterval(refreshRobots, 15000);
+refreshRobots();
+
+// ---------------- Stocks (trend, not prediction) ----------------
+const stocks = [
+  {sym:'AAPL', price:214.32, history:[]},
+  {sym:'NVDA', price:118.77, history:[]},
+  {sym:'MSFT', price:441.09, history:[]},
+];
+function renderStocks(){
+  const el = document.getElementById('stocksPanel');
+  const rows = stocks.map(s=>{
+    s.price = +(s.price + (Math.random()-0.5)*0.6).toFixed(2);
+    s.history.push(s.price); if(s.history.length>6) s.history.shift();
+    const up = s.history.length>2 && s.history[s.history.length-1] >= s.history[0];
+    return `<div class="ticker-row"><span class="ticker-sym">${s.sym}</span><span>$${s.price}</span><span class="${up?'up':'down'}">${up?'▲':'▼'}</span></div>`;
+  }).join('');
+  el.innerHTML = '<h5>MARKETS</h5>' + rows;
+}
+setInterval(renderStocks, 3000); renderStocks();
+
+// ---------------- Live flight tracker ----------------
+const map = L.map('flightMap', { zoomControl:false, attributionControl:false }).setView([CENTER_LAT, CENTER_LON], 6);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { subdomains:'abc', maxZoom:19 }).addTo(map);
+let flightMarkers = [];
+function planeIcon(heading){
+  return L.divIcon({ className:'', html:`<div style="transform:rotate(${heading}deg); color:#39ff6a; font-size:11px;">✈</div>`, iconSize:[12,12] });
+}
+// Tries multiple CORS proxies in order, since any single free proxy can go down or time out.
+async function fetchViaProxy(targetUrl){
+  const proxies = [
+    u => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+    u => `https://corsproxy.io/?url=${encodeURIComponent(u)}`,
+  ];
+  for(const build of proxies){
+    try{
+      const res = await fetch(build(targetUrl), { signal: AbortSignal.timeout(7000) });
+      if(res.ok) return res;
+    }catch(e){ /* try next proxy */ }
+  }
+  throw new Error('All CORS proxies failed');
+}
+async function updateFlights(){
+  try{
+    const targetUrl = `https://api.adsb.lol/v2/point/${CENTER_LAT}/${CENTER_LON}/150`;
+    const res = await fetchViaProxy(targetUrl);
+    const data = await res.json();
+    flightMarkers.forEach(m=>map.removeLayer(m)); flightMarkers=[];
+    const aircraft = data.ac || [];
+    aircraft.forEach(a=>{
+      if(a.lat==null||a.lon==null) return;
+      const heading = a.track || a.true_heading || 0;
+      const m = L.marker([a.lat,a.lon],{icon:planeIcon(heading)}).bindPopup((a.flight||a.hex||'?').trim());
+      m.addTo(map); flightMarkers.push(m);
+    });
+    document.getElementById('flightCount').textContent = aircraft.length + ' aircraft';
+  }catch(e){ document.getElementById('flightCount').textContent = 'feed unavailable'; }
+}
+setInterval(updateFlights, 30000); updateFlights();
+</script>
+
+</body>
+</html>

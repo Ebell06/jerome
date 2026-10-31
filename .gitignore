@@ -1,0 +1,9 @@
+.env
+KILL
+bin/
+obj/
+.vs/
+*.user
+*.mp3
+*.zip
+tasks.json
